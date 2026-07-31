@@ -1,7 +1,10 @@
 import argparse
 import os
+import json
 from dotenv import load_dotenv
 from openai import OpenAI
+from prompts import system_prompt
+from call_functions import available_functions
 
 load_dotenv()  # Load environment variables from .env file
 api_key = os.getenv("OPENROUTER_API_KEY")
@@ -20,6 +23,10 @@ client = OpenAI(
 
 messages = [
     {
+        "role": "system",
+        "content": system_prompt,
+    },
+    {
         "role": "user",
         "content": args.user_prompt,
     }
@@ -28,6 +35,7 @@ messages = [
 result = client.chat.completions.create(
     model="openrouter/free",
     messages=messages,
+    tools=available_functions,
 )
 
 if result.usage is None:
@@ -38,4 +46,11 @@ if args.verbose:
     print(f"Prompt tokens: {result.usage.prompt_tokens}")
     print(f"Response tokens: {result.usage.completion_tokens}")   
 
-print(result.choices[0].message.content)
+message = result.choices[0].message
+
+if message.tool_calls:
+    for tool_call in message.tool_calls:
+        function_args = json.loads(tool_call.function.arguments or "{}")
+        print(f"Calling function: {tool_call.function.name}({function_args})")
+else:
+    print(message.content)
