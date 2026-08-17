@@ -22,9 +22,6 @@ def main():
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     args = parser.parse_args()
 
-    make_call(args.user_prompt, client, args.verbose)
-
-def make_call(prompt: str, client: OpenAI, verbose: bool):
     messages = [
         {
             "role": "system",
@@ -32,9 +29,19 @@ def make_call(prompt: str, client: OpenAI, verbose: bool):
         },
         {
             "role": "user",
-            "content": prompt,
+            "content": args.user_prompt,
         }
     ]
+
+    done = False
+    for _ in range(20):
+        if (done := make_call(messages, client, args.verbose)):
+            break
+    if not done:
+        print("Error: Maximum number of iterations reached without completing the conversation.")
+        exit(1)
+
+def make_call(messages: list, client: OpenAI, verbose: bool) -> bool:
 
     result = client.chat.completions.create(
         model="openrouter/free",
@@ -52,15 +59,20 @@ def make_call(prompt: str, client: OpenAI, verbose: bool):
 
     message = result.choices[0].message
 
+    messages.append(message)
+
     if message.tool_calls:
         for tool_call in message.tool_calls:
             result_message = call_function(tool_call, verbose=verbose)
             if not result_message["content"]:
                 raise RuntimeError(f"Function call {tool_call.function.name} returned no content")
+            messages.append(result_message)
             if verbose:
                 print(f"-> {result_message['content']}")
+            return False
     else:
         print(message.content)
+        return True
 
 if __name__ == "__main__":
     main()
